@@ -1,4 +1,4 @@
-# S8: Visualización de Tráfico Aéreo - Área Metropolitana de Nueva York
+# Air Traffic Visualization — New York Metropolitan Area
 
 ## Descripción
 

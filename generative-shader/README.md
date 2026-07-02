@@ -1,4 +1,4 @@
-# S9-10: Shader Generativo
+# Generative Shader
 
 ## Descripción
 

@@ -1,21 +1,20 @@
-# Prácticas de IG
+# Graphics Playground
 
-## Descripción  
-Repositorio creado para guardar todas las prácticas de la asignatura *IG*.
+Colección de experimentos y proyectos de gráficos por computador: simulaciones 3D, visualización de datos en tiempo real, shaders generativos y videojuegos, desarrollados con Three.js, GLSL y Unity.
 
----
+## Proyectos
 
-## Contenido
+- [**Solar System**](./solar-system/README.md) — Simulación 3D interactiva del sistema solar con Three.js: planetas, órbitas, lunas y controles de cámara.
+- [**Air Traffic Visualization**](./air-traffic-visualization/README.md) — Visualización 3D en tiempo real del tráfico aéreo en el área metropolitana de Nueva York.
+- [**Generative Shader**](./generative-shader/README.md) — Shader GLSL generativo que alterna automáticamente entre 4 diseños visuales.
+- [**Arcade Hub**](./arcade-hub/README.md) — Hub de minijuegos arcade con menú principal y personaje 3D animado.
+- [**Car Racing Game**](./car-racing-game/README.md) — Juego de carreras 3D en Unity con 8 vehículos y dos modos de juego.
 
-- [S6-7 — Sistema solar](./S6-7/README.md)
-- [S8 — Visualización de Tráfico Aéreo (Nueva York)](./S8/README.md)
-- [S9-10 — Shader Generativo](./S9-10/README.md)
-- [S11 — Hub minijuegos arcade y personaje animado](./S11/README.md)
-- [Optativo — Juego de coches con Unity](./CarRacingGame/README.md)
+## Stack
 
----
+Three.js · WebGL / GLSL · JavaScript · Unity · C#
 
 ## Autor
 
-**Meng Fei Dai**  
+**Meng Fei Dai**
 [GitHub: @Mengfeidai1031](https://github.com/Mengfeidai1031)

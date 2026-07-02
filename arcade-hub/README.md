@@ -1,4 +1,4 @@
-# S11: Hub minijuegos arcade y personaje animado
+# Arcade Hub — Menú animado y minijuegos
 
 ## Descripción
 

@@ -1,4 +1,4 @@
-# S6-7: Sistema Solar
+# Solar System
 
 ## Descripción
 
