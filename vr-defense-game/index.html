@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>VR Shooting & Building Game - With Animations</title>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=no"
+    />
+    <link type="text/css" rel="stylesheet" href="style.css" />
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r126/three.js"
+      crossorigin="anonymous"
+    ></script>
+  </head>
+  <body>
+    <div id="info">
+      <div id="score">Score: 0</div>
+      <div id="enemies">Enemies: 0</div>
+      <div id="instructions">
+        LEFT: Shoot (trigger) | Build blocks (squeeze)<br />
+      </div>
+      <div id="loading">Loading models... 0%</div>
+    </div>
+    <script type="module">
+      import { VRButton } from "https://unpkg.com/three@0.126.0/examples/jsm/webxr/VRButton.js";
+      import { XRControllerModelFactory } from "https://unpkg.com/three@0.126.0/examples/jsm/webxr/XRControllerModelFactory.js";
+      import { GLTFLoader } from "https://unpkg.com/three@0.126.0/examples/jsm/loaders/GLTFLoader.js";
+
+      let camera, scene, renderer;
+      let controllerL, controllerR;
+      let controllerActionRadius = 0.15;
+      let checkGrabbingR = false;
+
+      // Game variables
+      let gun = null;
+      let enemies = [];
+      let bullets = [];
+      let blocks = [];
+      let score = 0;
+      let enemyCount = 0;
+
+      // 3D Models
+      let bananaModel = null;
+      let trumpModel = null;
+      let mixerBanana = null;
+      let mixerTrump = null;
+
+      // Loading progress
+      let loadingProgress = {
+        banana: 0,
+        trump: 0,
+      };
+
+      // Gun properties
+      let canShoot = true;
+      let shootCooldown = 300;
+
+      // GLTF Loader
+      const gltfLoader = new GLTFLoader();
+
+      initConfiguration();
+      initScene();
+      loadModels();
+      startGame();
+
+      function updateLoadingProgress() {
+        const total = (loadingProgress.banana + loadingProgress.trump) / 2;
+        const loadingDiv = document.getElementById("loading");
+        if (loadingDiv) {
+          loadingDiv.textContent = `Loading models... ${Math.round(total)}%`;
+          if (total >= 100) {
+            setTimeout(() => {
+              loadingDiv.style.display = "none";
+            }, 1000);
+          }
+        }
+      }
+
+      function loadModels() {
+        console.log("Loading 3D models from GitHub...");
+
+        // const bananaURL =
+        //   "https://media.githubusercontent.com/media/Mengfeidai1031/IG-S12/main/banana_fortnite.glb";
+        const trumpURL =
+          "https://media.githubusercontent.com/media/Mengfeidai1031/IG-S12/main/Trump_Twist_Dance.glb";
+
+        // Load Banana Dance
+        gltfLoader.load(
+          "./public/banana_fortnite.glb",
+          function (gltf) {
+            console.log("✅ Banana loaded successfully!");
+
+            // Contenedor para controlar posición/rotación/escala
+            const bananaContainer = new THREE.Group();
+            bananaContainer.position.set(-3, 0, -5); // Posición fija en la escena
+            scene.add(bananaContainer);
+
+            bananaModel = gltf.scene;
+            bananaModel.scale.set(1, 1, 1);
+
+            // Centrar el modelo respecto a su propio tamaño
+            const box = new THREE.Box3().setFromObject(bananaModel);
+            const center = box.getCenter(new THREE.Vector3());
+            bananaModel.position.sub(center); // Lo lleva al origen del contenedor
+
+            bananaModel.traverse((child) => {
+              if (child.isMesh) {
+                child.castShadow = true;
+              }
+            });
+
+            // Añadimos el modelo al contenedor (no directamente a la escena)
+            bananaContainer.add(bananaModel);
+
+            // Animaciones
+            if (gltf.animations && gltf.animations.length > 0) {
+              mixerBanana = new THREE.AnimationMixer(bananaModel);
+              gltf.animations.forEach((clip) => {
+                mixerBanana.clipAction(clip).play();
+              });
+              console.log("🎵 Banana animation playing");
+            }
+
+            loadingProgress.banana = 100;
+            updateLoadingProgress();
+          },
+          function (progress) {
+            loadingProgress.banana = Math.round(
+              (progress.loaded / progress.total) * 100
+            );
+            updateLoadingProgress();
+            console.log("Banana:", loadingProgress.banana + "%");
+          },
+          function (error) {
+            console.error("❌ Error loading banana:", error);
+            loadingProgress.banana = 100;
+            updateLoadingProgress();
+          }
+        );
+
+        // Load Trump Dance
+        gltfLoader.load(
+          trumpURL,
+          function (gltf) {
+            console.log("✅ Trump loaded successfully!");
+            trumpModel = gltf.scene;
+            trumpModel.position.set(3, 0, -5); // Posición derecha
+            trumpModel.scale.set(1, 1, 1);
+            trumpModel.traverse((child) => {
+              if (child.isMesh) {
+                child.castShadow = true;
+              }
+            });
+            scene.add(trumpModel);
+
+            if (gltf.animations && gltf.animations.length > 0) {
+              mixerTrump = new THREE.AnimationMixer(trumpModel);
+              gltf.animations.forEach((clip) => {
+                mixerTrump.clipAction(clip).play();
+              });
+              console.log("🎵 Trump animation playing");
+            }
+            loadingProgress.trump = 100;
+            updateLoadingProgress();
+          },
+          (progress) => {
+            loadingProgress.trump = Math.round(
+              (progress.loaded / progress.total) * 100
+            );
+            updateLoadingProgress();
+            console.log("Trump:", loadingProgress.trump + "%");
+          },
+          function (error) {
+            console.error("❌ Error loading Trump:", error);
+            loadingProgress.trump = 100;
+            updateLoadingProgress();
+          }
+        );
+      }
+
+      function initConfiguration() {
+        const container = document.createElement("div");
+        document.body.appendChild(container);
+
+        scene = new THREE.Scene();
+        scene.fog = new THREE.Fog(0x87ceeb, 10, 50);
+
+        camera = new THREE.PerspectiveCamera(
+          70,
+          window.innerWidth / window.innerHeight,
+          0.01,
+          100
+        );
+        camera.position.set(0, 1.6, 3);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.xr.enabled = true;
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        document.body.appendChild(VRButton.createButton(renderer));
+
+        // Initialize controllers
+        var controllerModelFactory = new XRControllerModelFactory();
+        controllerL = renderer.xr.getControllerGrip(0);
+        controllerR = renderer.xr.getControllerGrip(1);
+
+        const material = new THREE.MeshPhongMaterial({
+          shininess: 6,
+          transparent: 1,
+          opacity: 0.8,
+        });
+
+        const model1 = controllerModelFactory.createControllerModel(
+          controllerL,
+          material
+        );
+        controllerL.add(model1);
+        scene.add(controllerL);
+
+        const model2 =
+          controllerModelFactory.createControllerModel(controllerR);
+        controllerR.add(model2);
+        scene.add(controllerR);
+
+        // Sphere indicators
+        const materialSphereL = new THREE.MeshPhongMaterial({
+          color: new THREE.Color("rgb(0,255,0)"),
+          shininess: 1,
+          transparent: true,
+          opacity: 0.2,
+        });
+        var sphereL = new THREE.Mesh(
+          new THREE.SphereGeometry(controllerActionRadius, 20, 20),
+          materialSphereL
+        );
+        controllerL.add(sphereL);
+
+        const materialSphereR = new THREE.MeshPhongMaterial({
+          color: new THREE.Color("rgb(255,255,255)"),
+          shininess: 1,
+          transparent: true,
+          opacity: 0.2,
+        });
+        var sphereR = new THREE.Mesh(
+          new THREE.SphereGeometry(controllerActionRadius, 20, 20),
+          materialSphereR
+        );
+        controllerR.add(sphereR);
+
+        // Add ray to left controller
+        var geometry = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(0, 0, 0),
+          new THREE.Vector3(0, 0, -50),
+        ]);
+        var lineMaterial = new THREE.LineBasicMaterial({
+          color: 0xff0000,
+        });
+        var line = new THREE.Line(geometry, lineMaterial);
+        controllerL.add(line);
+
+        // Create gun attached to left controller immediately
+        createGunInHand();
+
+        // Events for left controller
+        controllerL.addEventListener("selectstart", onLeftTriggerPress);
+        controllerL.addEventListener("squeezestart", onLeftSqueezePress);
+
+        // Events for right controller
+        controllerR.addEventListener("selectstart", SelectEventGrab);
+        controllerR.addEventListener("selectend", SelectEventGrabEnd);
+
+        renderer.setAnimationLoop(render);
+      }
+
+      function SelectEventGrab(event) {
+        checkGrabbingR = true;
+      }
+
+      function SelectEventGrabEnd(event) {
+        checkGrabbingR = false;
+        // Detach objects from controller
+        for (var i = 0; i < blocks.length; i++) {
+          scene.attach(blocks[i]);
+        }
+      }
+
+      function onLeftTriggerPress() {
+        console.log("Trigger pressed! Gun exists:", gun !== null);
+        shootBullet();
+      }
+
+      function onLeftSqueezePress() {
+        console.log("Squeeze pressed!");
+        buildBlock();
+      }
+
+      function shootBullet() {
+        if (!canShoot) {
+          console.log("Can't shoot - cooldown");
+          return;
+        }
+
+        if (!gun) {
+          console.log("Gun not ready yet");
+          return;
+        }
+
+        console.log("SHOOTING!");
+        canShoot = false;
+        setTimeout(() => {
+          canShoot = true;
+        }, shootCooldown);
+
+        // Create bullet
+        const bulletGeometry = new THREE.SphereGeometry(0.05, 8, 8);
+        const bulletMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+        const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+
+        // Get controller world position
+        const controllerWorldPos = new THREE.Vector3();
+        controllerL.getWorldPosition(controllerWorldPos);
+        bullet.position.copy(controllerWorldPos);
+
+        // Calculate direction
+        const tempMatrix = new THREE.Matrix4();
+        tempMatrix.identity().extractRotation(controllerL.matrixWorld);
+        const direction = new THREE.Vector3(0, 0, -1);
+        direction.applyMatrix4(tempMatrix);
+
+        bullet.userData.velocity = direction.multiplyScalar(0.5);
+        bullet.userData.lifetime = 100;
+        bullet.userData.isBullet = true;
+
+        console.log("Bullet created at:", bullet.position);
+        console.log("Bullet direction:", direction);
+
+        scene.add(bullet);
+        bullets.push(bullet);
+
+        // Muzzle flash
+        createMuzzleFlash(controllerWorldPos);
+      }
+
+      function createMuzzleFlash(position) {
+        const flashGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+        const flashMaterial = new THREE.MeshBasicMaterial({
+          color: 0xffaa00,
+        });
+        const flash = new THREE.Mesh(flashGeometry, flashMaterial);
+        flash.position.copy(position);
+        scene.add(flash);
+
+        setTimeout(() => {
+          scene.remove(flash);
+        }, 50);
+      }
+
+      function buildBlock() {
+        // Build block using ray intersection
+        var raycaster = new THREE.Raycaster();
+        var tempMatrix = new THREE.Matrix4();
+        tempMatrix.identity().extractRotation(controllerL.matrixWorld);
+        raycaster.ray.origin.setFromMatrixPosition(controllerL.matrixWorld);
+        raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+
+        var intersections = raycaster.intersectObjects(scene.children, true);
+
+        let targetPosition = null;
+        for (let i = 0; i < intersections.length; i++) {
+          const intersection = intersections[i];
+          if (
+            intersection.object.userData.isGround ||
+            intersection.object.userData.isBlock
+          ) {
+            targetPosition = intersection.point;
+            break;
+          }
+        }
+
+        if (targetPosition) {
+          const blockGeometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+          const blockMaterial = new THREE.MeshStandardMaterial({
+            color: Math.random() * 0xffffff,
+            roughness: 0.7,
+            metalness: 0.3,
+          });
+          const block = new THREE.Mesh(blockGeometry, blockMaterial);
+          block.position.copy(targetPosition);
+          block.position.y += 0.25;
+          block.castShadow = true;
+          block.receiveShadow = true;
+          block.userData.isBlock = true;
+
+          // Add bounding box for collision detection
+          block.geometry.computeBoundingBox();
+
+          scene.add(block);
+          blocks.push(block);
+          console.log("Block created at:", block.position);
+        }
+      }
+
+      function CheckGrabbingBlocks() {
+        for (var i = 0; i < blocks.length; i++) {
+          var diferenciaX = controllerR.position.x - blocks[i].position.x;
+          var diferenciaY = controllerR.position.y - blocks[i].position.y;
+          var diferenciaZ = controllerR.position.z - blocks[i].position.z;
+          if (
+            Math.sqrt(
+              Math.pow(diferenciaX, 2) +
+                Math.pow(diferenciaY, 2) +
+                Math.pow(diferenciaZ, 2)
+            ) <= controllerActionRadius
+          ) {
+            controllerR.attach(blocks[i]);
+          }
+        }
+      }
+
+      function initScene() {
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        var light = new THREE.HemisphereLight(0xffffbb, 0x080820, 1);
+        light.position.set(0.5, 1, 0.25);
+        scene.add(light);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(10, 20, 10);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+
+        // Sky
+        const skyGeometry = new THREE.SphereGeometry(40, 32, 32);
+        const skyMaterial = new THREE.MeshBasicMaterial({
+          color: 0x87ceeb,
+          side: THREE.BackSide,
+        });
+        const sky = new THREE.Mesh(skyGeometry, skyMaterial);
+        scene.add(sky);
+
+        // Ground
+        const groundGeometry = new THREE.PlaneGeometry(50, 50);
+        const groundMaterial = new THREE.MeshStandardMaterial({
+          color: 0x3a8c3a,
+          roughness: 0.8,
+        });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        ground.userData.isGround = true;
+        scene.add(ground);
+
+        // Walls
+        createWall(0, 1.5, -15, 50, 3, 0.5, 0x8b4513);
+        createWall(0, 1.5, 15, 50, 3, 0.5, 0x8b4513);
+        createWall(-15, 1.5, 0, 0.5, 3, 30, 0x8b4513);
+        createWall(15, 1.5, 0, 0.5, 3, 30, 0x8b4513);
+      }
+
+      function createWall(x, y, z, width, height, depth, color) {
+        const wallGeometry = new THREE.BoxGeometry(width, height, depth);
+        const wallMaterial = new THREE.MeshStandardMaterial({
+          color: color,
+          roughness: 0.9,
+        });
+        const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+        wall.position.set(x, y, z);
+        wall.receiveShadow = true;
+        wall.castShadow = true;
+        scene.add(wall);
+      }
+
+      function createGunInHand() {
+        const gunGroup = new THREE.Group();
+
+        // Gun body
+        const bodyGeometry = new THREE.BoxGeometry(0.05, 0.08, 0.2);
+        const bodyMaterial = new THREE.MeshStandardMaterial({
+          color: 0x1a1a1a,
+        });
+        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        body.castShadow = true;
+        gunGroup.add(body);
+
+        // Gun barrel
+        const barrelGeometry = new THREE.CylinderGeometry(0.01, 0.01, 0.15, 8);
+        const barrelMaterial = new THREE.MeshStandardMaterial({
+          color: 0x333333,
+        });
+        const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+        barrel.rotation.x = Math.PI / 2;
+        barrel.position.z = -0.15;
+        barrel.castShadow = true;
+        gunGroup.add(barrel);
+
+        // Handle
+        const handleGeometry = new THREE.BoxGeometry(0.03, 0.08, 0.04);
+        const handle = new THREE.Mesh(handleGeometry, bodyMaterial);
+        handle.position.set(0, -0.06, 0.02);
+        handle.castShadow = true;
+        gunGroup.add(handle);
+
+        // Attach to left controller
+        controllerL.add(gunGroup);
+        gunGroup.position.set(0, 0, -0.1);
+        gunGroup.rotation.set(-Math.PI / 2, 0, 0);
+        gun = gunGroup;
+
+        console.log("Gun created and attached to controller");
+      }
+
+      function createEnemy() {
+        const enemyGroup = new THREE.Group();
+
+        // Body
+        const bodyGeometry = new THREE.BoxGeometry(0.5, 0.7, 0.35);
+        const bodyMaterial = new THREE.MeshStandardMaterial({
+          color: 0xff0000,
+        });
+        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        body.position.y = 0.35;
+        body.castShadow = true;
+        enemyGroup.add(body);
+
+        // Head
+        const headGeometry = new THREE.SphereGeometry(0.18, 16, 16);
+        const headMaterial = new THREE.MeshStandardMaterial({
+          color: 0xcc0000,
+        });
+        const head = new THREE.Mesh(headGeometry, headMaterial);
+        head.position.y = 0.82;
+        head.castShadow = true;
+        enemyGroup.add(head);
+
+        // Eyes
+        const eyeGeometry = new THREE.SphereGeometry(0.035, 8, 8);
+        const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+        const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+        leftEye.position.set(-0.07, 0.85, 0.14);
+        enemyGroup.add(leftEye);
+        const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+        rightEye.position.set(0.07, 0.85, 0.14);
+        enemyGroup.add(rightEye);
+
+        // Random spawn position
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 10;
+        enemyGroup.position.set(
+          Math.cos(angle) * distance,
+          0,
+          Math.sin(angle) * distance
+        );
+
+        enemyGroup.userData.health = 3;
+        enemyGroup.userData.isEnemy = true;
+        enemyGroup.userData.radius = 0.35;
+
+        scene.add(enemyGroup);
+        enemies.push(enemyGroup);
+        enemyCount++;
+        updateUI();
+
+        console.log("Enemy created at:", enemyGroup.position);
+      }
+
+      function checkBlockCollision(position, radius) {
+        for (let i = 0; i < blocks.length; i++) {
+          const block = blocks[i];
+          const blockHalfSize = 0.25;
+
+          if (
+            position.x + radius > block.position.x - blockHalfSize &&
+            position.x - radius < block.position.x + blockHalfSize &&
+            position.z + radius > block.position.z - blockHalfSize &&
+            position.z - radius < block.position.z + blockHalfSize
+          ) {
+            return true;
+          }
+        }
+        return false;
+      }
+
+      function updateEnemies() {
+        for (let i = enemies.length - 1; i >= 0; i--) {
+          const enemy = enemies[i];
+
+          const direction = new THREE.Vector3();
+          direction.subVectors(camera.position, enemy.position);
+          direction.y = 0;
+          direction.normalize();
+
+          const newPosition = enemy.position.clone();
+          newPosition.add(direction.multiplyScalar(0.012));
+
+          if (!checkBlockCollision(newPosition, enemy.userData.radius)) {
+            enemy.position.copy(newPosition);
+          }
+
+          const distance = Math.sqrt(
+            Math.pow(enemy.position.x - camera.position.x, 2) +
+              Math.pow(enemy.position.z - camera.position.z, 2)
+          );
+
+          if (distance < 1) {
+            scene.remove(enemy);
+            enemies.splice(i, 1);
+            enemyCount--;
+            score -= 10;
+            updateUI();
+            console.log("Enemy reached player! Score:", score);
+          }
+        }
+      }
+
+      function updateBullets() {
+        for (let i = bullets.length - 1; i >= 0; i--) {
+          const bullet = bullets[i];
+
+          if (!bullet.userData.velocity) continue;
+
+          bullet.position.add(bullet.userData.velocity);
+          bullet.userData.lifetime--;
+
+          if (bullet.userData.lifetime <= 0) {
+            scene.remove(bullet);
+            bullets.splice(i, 1);
+            continue;
+          }
+
+          for (let j = enemies.length - 1; j >= 0; j--) {
+            const enemy = enemies[j];
+
+            const distance = Math.sqrt(
+              Math.pow(bullet.position.x - enemy.position.x, 2) +
+                Math.pow(bullet.position.y - enemy.position.y, 2) +
+                Math.pow(bullet.position.z - enemy.position.z, 2)
+            );
+
+            if (distance < 0.7) {
+              enemy.userData.health--;
+
+              console.log(
+                "Enemy hit! Health remaining:",
+                enemy.userData.health
+              );
+
+              const originalColor = enemy.children[0].material.color.getHex();
+              enemy.children[0].material.color.setHex(0xffffff);
+              setTimeout(() => {
+                if (enemy.parent) {
+                  enemy.children[0].material.color.setHex(originalColor);
+                }
+              }, 100);
+
+              if (enemy.userData.health <= 0) {
+                scene.remove(enemy);
+                enemies.splice(j, 1);
+                score += 10;
+                enemyCount--;
+                createExplosion(enemy.position);
+                console.log("Enemy destroyed! Score:", score);
+              }
+
+              scene.remove(bullet);
+              bullets.splice(i, 1);
+              updateUI();
+              break;
+            }
+          }
+        }
+      }
+
+      function createExplosion(position) {
+        console.log("Creating explosion at:", position);
+        for (let i = 0; i < 8; i++) {
+          const particleGeometry = new THREE.SphereGeometry(0.05, 4, 4);
+          const particleMaterial = new THREE.MeshBasicMaterial({
+            color: Math.random() > 0.5 ? 0xff6600 : 0xffff00,
+          });
+          const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+          particle.position.copy(position);
+
+          const velocity = new THREE.Vector3(
+            (Math.random() - 0.5) * 0.1,
+            Math.random() * 0.1,
+            (Math.random() - 0.5) * 0.1
+          );
+          particle.userData.velocity = velocity;
+          particle.userData.lifetime = 20;
+
+          scene.add(particle);
+          bullets.push(particle);
+        }
+      }
+
+      function startGame() {
+        console.log("Game started!");
+
+        setInterval(() => {
+          if (enemies.length < 8) {
+            createEnemy();
+          }
+        }, 4000);
+
+        for (let i = 0; i < 3; i++) {
+          setTimeout(() => createEnemy(), i * 1000);
+        }
+      }
+
+      function updateUI() {
+        document.getElementById("score").textContent = `Score: ${score}`;
+        document.getElementById(
+          "enemies"
+        ).textContent = `Enemies: ${enemyCount}`;
+      }
+
+      const clock = new THREE.Clock();
+
+      function render() {
+        const delta = clock.getDelta();
+
+        // Actualizar las animaciones
+        if (mixerBanana) mixerBanana.update(delta);
+        if (mixerTrump) mixerTrump.update(delta);
+
+        if (checkGrabbingR) CheckGrabbingBlocks();
+        updateEnemies();
+        updateBullets();
+        renderer.render(scene, camera);
+      }
+    </script>
+  </body>
+</html>

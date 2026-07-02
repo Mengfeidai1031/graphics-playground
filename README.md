@@ -9,10 +9,11 @@ Colección de experimentos y proyectos de gráficos por computador: simulaciones
 - [**Generative Shader**](./generative-shader/README.md) — Shader GLSL generativo que alterna automáticamente entre 4 diseños visuales.
 - [**Arcade Hub**](./arcade-hub/README.md) — Hub de minijuegos arcade con menú principal y personaje 3D animado.
 - [**Car Racing Game**](./car-racing-game/README.md) — Juego de carreras 3D en Unity con 8 vehículos y dos modos de juego.
+- [**VR Defense Game**](./vr-defense-game/README.md) — Juego VR para WebXR donde defiendes tu posición contra oleadas de enemigos, con arma, construcción de defensas y modelos 3D animados.
 
 ## Stack
 
-Three.js · WebGL / GLSL · JavaScript · Unity · C#
+Three.js · WebGL / GLSL · WebXR · JavaScript · Unity · C#
 
 ## Autor
 
